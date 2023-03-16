@@ -1,9 +1,13 @@
-import os
 import logging
+import os
+
+import arcpy
 import numpy as np
 import pandas as pd
+from arcgis.features import Feature, FeatureSet
+from arcgis.geometry import Point
 from arcgis.gis import GIS
-import arcpy
+from arcgis.network import network
 
 
 def make_random_points(polygon, N=10):
@@ -29,8 +33,10 @@ def get_metro_service_areas(
     ----------
     nd_path: string, path to network dataset in gdb.
     points: list of (longitude, latitude) points at which to evaluate service areas.
-    cutoffs: list of minutes at which to generate service areas. Each service area will be from [0 - cutoff] for all cutoffs.
-    time_of_day: datetime object to specify date and time of service area analysis. Default is None so analysis is time-agnostic.
+    cutoffs: list of minutes at which to generate service areas. Each service area
+    will be from [0 - cutoff] for all cutoffs.
+    time_of_day: datetime object to specify date and time of service area analysis.
+    Default is None so analysis is time-agnostic.
     verbose: turn on debug logging if set to 1. Default is 0.
 
     Returns
@@ -46,7 +52,7 @@ def get_metro_service_areas(
     nd_layer_name = os.path.basename(nd_path)
     try:
         arcpy.nax.MakeNetworkDatasetLayer(nd_path, nd_layer_name)
-    except:
+    except BaseException:
         logger.debug(f"Network Dataset Layer already exists. Using {nd_layer_name}.")
     # get public transit mode
     try:
@@ -55,7 +61,8 @@ def get_metro_service_areas(
         logger.debug("Network Dataset Layer loaded and public transit travel mode found.")
     except KeyError:
         raise ValueError(
-            f"Public Transit travel mode is not in network dataset. Available transit modes include: {arcpy.nax.GetTravelModes(nd_layer_name)}"
+            f"Public Transit travel mode is not in network dataset. Available transit \
+            modes include: {arcpy.nax.GetTravelModes(nd_layer_name)}"
         )
 
     # Instantiate a ServiceArea solver object
@@ -109,7 +116,7 @@ def get_metro_service_areas(
 
 
 def get_drive_time_service_areas(
-    points, cutoffs=[10, 20, 30, 40, 50, 60], time_of_day=None, gis=gis, verbose=0
+    points, cutoffs=[10, 20, 30, 40, 50, 60], time_of_day=None, gis=GIS(), verbose=0
 ):
     """
     Generate transit service areas for given points.
@@ -117,8 +124,10 @@ def get_drive_time_service_areas(
     Parameters
     ----------
     points: list of (longitude, latitude) points at which to evaluate service areas.
-    cutoffs: list of minutes at which to generate service areas. Each service area will be from [0 - cutoff] for all cutoffs.
-    time_of_day: datetime object to specify date and time of service area analysis. Default is None so analysis is time-agnostic.
+    cutoffs: list of minutes at which to generate service areas. Each service area
+    will be from [0 - cutoff] for all cutoffs.
+    time_of_day: datetime object to specify date and time of service area analysis.
+    Default is None so analysis is time-agnostic.
     gis: GIS environment to use.
     verbose: turn on debug logging if set to 1. Default is 0.
 
@@ -180,10 +189,13 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
 
     Parameters
     ----------
-    transit_sedf: SEDF with shapes of transit service areas and unique names of format "<Facility ID> : <FromBreak> - <ToBreak>".
-    drive_sedf: SEDF with shapes of drive-time service areas and unique names matching those in `transit_sedf`.
+    transit_sedf: SEDF with shapes of transit service areas and unique
+    names of format "<Facility ID> : <FromBreak> - <ToBreak>".
+    drive_sedf: SEDF with shapes of drive-time service areas and unique
+    names matching those in `transit_sedf`.
     bonus_weight: float (Default 2.0) of weightage to give to transit bonus.
-    return_all: bool (Default False) whether to return all columns (including intermediate steps) or just the final metroscore.
+    return_all: bool (Default False) whether to return all columns
+    (including intermediate steps) or just the final metroscore.
 
     Returns
     -------
@@ -195,7 +207,7 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
     """
     # merge transit and drive sedfs
     joined_sa = pd.merge(
-        left=sedf[["Name", "SHAPE"]],
+        left=transit_sedf[["Name", "SHAPE"]],
         right=drive_sedf[["Name", "SHAPE"]],
         on="Name",
         how="inner",
