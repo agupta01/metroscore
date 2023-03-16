@@ -33,8 +33,8 @@ setup(
     ],
     keywords="",
     url="https://github.com/agupta01/metroscore",
-    author="Allen Institute for Artificial Intelligence",
-    author_email="contact@allenai.org",
+    author="Arunav Gupta",
+    author_email="centaurus.ab@gmail.com",
     license="Apache",
     packages=find_packages(
         exclude=["*.tests", "*.tests.*", "tests.*", "tests"],
