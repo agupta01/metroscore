@@ -1,23 +1,23 @@
 Installation
 ============
 
-**my-package** supports Python >= 3.8.
+**metroscore** supports Python >= 3.8.
 
 ## Installing with `pip`
 
-**my-package** is available [on PyPI](https://pypi.org/project/my-package/). Just run
+**metroscore** is available [on PyPI](https://pypi.org/project/metroscore/). Just run
 
 ```bash
-pip install my-package
+pip install metroscore
 ```
 
 ## Installing from source
 
-To install **my-package** from source, first clone [the repository](https://github.com/allenai/python-package-template):
+To install **metroscore** from source, first clone [the repository](https://github.com/agupta01/metroscore):
 
 ```bash
-git clone https://github.com/allenai/python-package-template.git
-cd python-package-template
+git clone https://github.com/agupta01/metroscore.git
+cd metroscore
 ```
 
 Then run
