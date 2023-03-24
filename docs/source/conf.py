@@ -23,8 +23,8 @@ from metroscore import VERSION, VERSION_SHORT  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = "metroscore"
-copyright = f"{datetime.today().year}, Allen Institute for Artificial Intelligence"
-author = "Allen Institute for Artificial Intelligence"
+copyright = f"{datetime.today().year}, Arunav Gupta"
+author = "Arunav Gupta"
 version = VERSION_SHORT
 release = VERSION
 
@@ -43,6 +43,7 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx_copybutton",
     "sphinx_autodoc_typehints",
+    "sphinx.ext.autosummary",
 ]
 
 # Tell myst-parser to assign header anchors for h1-h3.

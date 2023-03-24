@@ -5,13 +5,16 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
     """
     Computes the row-wise metroscore for each computed service area.
 
-    :param transit_sedf: SEDF with shapes of transit service areas and unique names of format "<Facility ID> : <FromBreak> - <ToBreak>".
+    :param transit_sedf: SEDF with shapes of transit service areas and unique names of
+    format "<Facility ID> : <FromBreak> - <ToBreak>".
     :type transit_sedf: pandas.DataFrame
-    :param drive_sedf: SEDF with shapes of drive-time service areas and unique names matching those in `transit_sedf`.
+    :param drive_sedf: SEDF with shapes of drive-time service areas and unique names
+    matching those in `transit_sedf`.
     :type drive_sedf: pandas.DataFrame
     :param bonus_weight: float of weightage to give to transit bonus., defaults to 2.0
     :type bonus_weight: float, optional
-    :param return_all: whether to return all columns (including intermediate steps) or just the final metroscore., defaults to False
+    :param return_all: whether to return all columns (including intermediate steps) or
+    just the final metroscore., defaults to False
     :type return_all: bool, optional
     :return: Pandas DataFrame with schema:
     {

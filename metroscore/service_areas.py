@@ -1,9 +1,6 @@
 import logging
 import os
 
-import arcgis.network as network
-import arcpy
-import arcpy.nax as nax
 import pandas as pd
 from arcgis.features import Feature, FeatureSet
 from arcgis.geometry import project
@@ -22,15 +19,20 @@ def get_metro_service_areas(
     :type nd_path: str
     :param points: list of (longitude, latitude) points at which to evaluate service areas.
     :type points: list[tuple[float, float]]
-    :param cutoffs: list of minutes at which to generate service areas. Each service area will be from [0 - cutoff] for all cutoffs.
+    :param cutoffs: list of minutes at which to generate service areas.
+    Each service area will be from [0 - cutoff] for all cutoffs.
     :type cutoffs: list[int]
-    :param time_of_day: datetime object to specify date and time of service area analysis. Default is None so analysis is time-agnostic.
+    :param time_of_day: datetime object to specify date and time of service area analysis.
+    Default is None so analysis is time-agnostic.
     :type time_of_day: datetime.datetime
     :param verbose: turn on debug logging if set to 1. Default is 0.
     :type verbose: int
     :return: SEDF with (len(points) * len(cutoffs)) rows. Each row corresponds to one location at one cutoff time.
     :rtype: pandas.DataFrame
     """
+    import arcpy
+    import arcpy.nax as nax
+
     logger = logging.getLogger()
     if verbose == 1:
         logger.setLevel(logging.DEBUG)
@@ -39,7 +41,7 @@ def get_metro_service_areas(
     nd_layer_name = os.path.basename(nd_path)
     try:
         nax.MakeNetworkDatasetLayer(nd_path, nd_layer_name)
-    except:
+    except Exception:
         logger.debug(f"Network Dataset Layer already exists. Using {nd_layer_name}.")
     # get public transit mode
     try:
@@ -48,7 +50,8 @@ def get_metro_service_areas(
         logger.debug("Network Dataset Layer loaded and public transit travel mode found.")
     except KeyError:
         raise ValueError(
-            f"Public Transit travel mode is not in network dataset. Available transit modes include: {arcpy.nax.GetTravelModes(nd_layer_name)}"
+            f"Public Transit travel mode is not in network dataset. \
+                Available transit modes include: {arcpy.nax.GetTravelModes(nd_layer_name)}"
         )
 
     # Instantiate a ServiceArea solver object
@@ -118,9 +121,11 @@ def get_drive_time_service_areas(
 
     :param points: list of (longitude, latitude) points at which to evaluate service areas.
     :type points: list[tuple[float, float]]
-    :param cutoffs: list of minutes at which to generate service areas. Each service area will be from [0 - cutoff] for all cutoffs.
+    :param cutoffs: list of minutes at which to generate service areas.
+    Each service area will be from [0 - cutoff] for all cutoffs.
     :type cutoffs: list[int]
-    :param time_of_day: datetime object to specify date and time of service area analysis. Default is None so analysis is time-agnostic.
+    :param time_of_day: datetime object to specify date and time of service area analysis.
+    Default is None so analysis is time-agnostic.
     :type time_of_day: datetime.datetime
     :param gis: GIS environment to use.
     :type gis: arcgis.gis.GIS
@@ -129,13 +134,12 @@ def get_drive_time_service_areas(
     :return: SEDF with (len(points) * len(cutoffs)) rows. Each row corresponds to one location at one cutoff time.
     :rtype: pandas.DataFrame
     """
+    import arcpy
+    import arcpy.nax as nax
+
     logger = logging.getLogger()
     if verbose == 1:
         logger.setLevel(logging.DEBUG)
-
-    # create service area
-    service_area_url = gis.properties.helperServices.serviceArea.url
-    sa_layer = network.ServiceAreaLayer(service_area_url, gis=gis)
 
     # create points Feature Set
     feat_points = [Feature(geometry={"x": p[0], "y": p[1]}) for p in points]

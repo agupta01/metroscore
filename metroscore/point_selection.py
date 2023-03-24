@@ -50,16 +50,16 @@ def make_grid_points(polygon, N=10):
         )[0]
 
     w0, l0, w1, l1 = polygon.extent
-    w = w1 - w0
-    l = l1 - l0
-    extent_area = w * l
+    width = w1 - w0
+    length = l1 - l0
+    extent_area = width * length
     # check ratio of extent rectangle area to polygon area, pad N by that amount
     # (we expect approx. that many points to be outside) the polygon and we want N points inside the polygon
     N = N * (extent_area / polygon.area)
 
     # compute rows and columns, this is done via the solution to the system N_w * N_l = N; N_w/N_l = w/l
-    Nw = int(np.round(np.sqrt((w * N) / l)))
-    Nl = int(np.round((l / w) * Nw))
+    Nw = int(np.round(np.sqrt((width * N) / length)))
+    Nl = int(np.round((length / width) * Nw))
 
     # build grid
     grid_w = np.linspace(w0, w1, Nw)

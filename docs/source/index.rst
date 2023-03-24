@@ -12,11 +12,12 @@ Contents
 --------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Getting started:
 
    installation
-   overview
+   tutorial
+   api
    CHANGELOG
 
 .. toctree::
@@ -30,11 +31,7 @@ Contents
 Team
 ----
 
-**metroscore** is developed and maintained by the AllenNLP team, backed by
-`the Allen Institute for Artificial Intelligence (AI2) <https://allenai.org/>`_.
-AI2 is a non-profit institute with the mission to contribute to humanity through high-impact AI research and engineering.
-To learn more about who specifically contributed to this codebase, see
-`our contributors <https://github.com/agupta01/metroscore/graphs/contributors>`_ page.
+**metroscore** is developed and maintained by Arunav Gupta.
 
 License
 -------
