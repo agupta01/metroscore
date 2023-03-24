@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v0.2.0](https://github.com/agupta01/metroscore/releases/tag/v0.2.0) - 2023-03-24
+
+## Added
+- `make_grid_points` function to generate a grid of points within a polygon (useful for metroscore heatmaps)
+- Support for time-of-day metroscore analysis
+
+## Removed
+- Functions in `metroscore` module
+
 ## Changed
 - Functions now organized in submodules: `point_selection`, `service_areas`, `analysis`
 - New "Metroscore 101" tutorial in docs
+
+## Fixed
+- Point generation now works for polygons in non-epsg:4326 projections
+- Network datasets in non-epsg:4326 projections are now supported
+- Drive time service areas use faster ArcGIS functional backend
 
 ## [v0.1.1](https://github.com/agupta01/metroscore/releases/tag/v0.1.1) - 2023-03-16
 
