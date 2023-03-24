@@ -134,9 +134,6 @@ def get_drive_time_service_areas(
     :return: SEDF with (len(points) * len(cutoffs)) rows. Each row corresponds to one location at one cutoff time.
     :rtype: pandas.DataFrame
     """
-    import arcpy
-    import arcpy.nax as nax
-
     logger = logging.getLogger()
     if verbose == 1:
         logger.setLevel(logging.DEBUG)
