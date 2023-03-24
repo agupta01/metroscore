@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from metroscore.version import VERSION
+from metroscore import VERSION
 
 
 def main():
