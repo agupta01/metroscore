@@ -1,7 +1,3 @@
-import numpy as np
-from arcgis.geometry import Point, project
-
-
 def make_random_points(polygon, N=10):
     """
     Creates `N` random points within the polygon `polygon`.
@@ -13,6 +9,9 @@ def make_random_points(polygon, N=10):
     :return: List of (longitude, latitude) points.
     :rtype: list[tuple[float, float]]
     """
+    import numpy as np
+    from arcgis.geometry import Point, project
+
     # check if in 4326 spatial reference, if not, project to it
     if not polygon.spatial_reference or polygon.spatial_reference["latestWkid"] != 4326:
         polygon = project(
@@ -41,6 +40,9 @@ def make_grid_points(polygon, N=10):
     :return: List of (longitude, latitude) points.
     :rtype: list[tuple[float, float]]
     """
+    import numpy as np
+    from arcgis.geometry import Point, project
+
     # check if in 4326 spatial reference, if not, project to it
     if not polygon.spatial_reference or polygon.spatial_reference["latestWkid"] != 4326:
         polygon = project(
