@@ -2,5 +2,5 @@ name: metroscore
 channels:
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.10
 prefix: /Users/arunavgupta/anaconda3/envs/metroscore
