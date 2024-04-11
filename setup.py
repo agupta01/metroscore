@@ -34,7 +34,7 @@ setup(
     keywords="",
     url="https://github.com/agupta01/metroscore",
     author="Arunav Gupta",
-    author_email="centaurus.ab@gmail.com",
+    author_email="arunav.gupta@nyu.edu",
     license="Apache",
     packages=find_packages(
         exclude=["*.tests", "*.tests.*", "tests.*", "tests"],

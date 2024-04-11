@@ -1,6 +1,0 @@
-name: metroscore
-channels:
-  - defaults
-dependencies:
-  - python=3.9
-prefix: /Users/arunavgupta/anaconda3/envs/metroscore
