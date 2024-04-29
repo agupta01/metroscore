@@ -1,15 +1,12 @@
 import warnings
-from functools import cache
-from typing import Callable, Dict, List, Tuple, Any
-from collections import namedtuple
 from dataclasses import dataclass
+from functools import cache
+from typing import Any, Callable, Dict, List, Tuple
 from uuid import uuid4
 
-import networkx as nx
-from numpy import isin
 import osmnx as ox
-from networkx import Graph, MultiDiGraph
-from shapely.geometry import Point, LineString
+from networkx import Graph
+from shapely.geometry import LineString, Point
 
 OSMEdge = Tuple[int, int, Dict]  # (u_id, v_id, data)
 OSMNode = Tuple[int, Dict]  # (node_id, data)
@@ -227,9 +224,9 @@ def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
     """
     # fill missing geometries for both graphs. This implicitly deep copies the graphs as well.
     G = __fill_missing_geometries(a)
-    O = __fill_missing_geometries(other)
+    G_O = __fill_missing_geometries(other)
 
-    mapping = get_merge_mapping(a=G, b=O)
+    mapping = get_merge_mapping(a=G, b=G_O)
     # If a node can merge to an edge or a node, prefer the closest distance merge candidate
     # If still tied, prefer the node
     all_merges = merge_dicts_on_key(
@@ -243,7 +240,7 @@ def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
         if isinstance(n2, tuple) and len(n2) == 2:
             # Is edge
             if dist < tol:
-                e2 = (n2[0], n2[1], O.get_edge_data(n2[0], n2[1])[0])
+                e2 = (n2[0], n2[1], G_O.get_edge_data(n2[0], n2[1])[0])
                 merge_result: NodeToEdgeMergeResult = merge_edge_to_node(
                     node=prep_node_tuple(G, n1), edge=e2
                 )
@@ -253,20 +250,20 @@ def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
                 new_nodes.append(merge_result.projected_node[0])
                 # Then, add edges in O partitioned at the projected node
                 # Keep original edge in O because it may be in all_merges
-                add_new_edge_to_graph(O, merge_result.partitioned_edges[0])
-                add_new_edge_to_graph(O, merge_result.partitioned_edges[1])
+                add_new_edge_to_graph(G_O, merge_result.partitioned_edges[0])
+                add_new_edge_to_graph(G_O, merge_result.partitioned_edges[1])
 
         elif isinstance(n2, int):
             # Is node
             if dist < tol:
                 new_edge: OSMEdge = merge_node_to_node(
-                    a=prep_node_tuple(G, n1), b=prep_node_tuple(O, n2)
+                    a=prep_node_tuple(G, n1), b=prep_node_tuple(G_O, n2)
                 )
                 add_new_edge_to_graph(G, new_edge)
                 new_nodes.append(new_edge[1])
         else:
             raise ValueError(f"Invalid merge mapping from {n1} to {to_merge}")
     print(len(new_nodes))
-    G.add_nodes_from(O.nodes(data=True))
-    G.add_edges_from(O.edges(data=True))
+    G.add_nodes_from(G_O.nodes(data=True))
+    G.add_edges_from(G_O.edges(data=True))
     return G
