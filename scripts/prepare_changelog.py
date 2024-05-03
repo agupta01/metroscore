@@ -10,7 +10,7 @@ def main():
     with changelog.open() as f:
         lines = f.readlines()
 
-    insert_index: int = -1
+    insert_index = -1
     for i in range(len(lines)):
         line = lines[i]
         if line.startswith("## Unreleased"):
