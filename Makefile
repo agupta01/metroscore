@@ -11,6 +11,14 @@ run-checks :
 	mypy .
 	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ metroscore/
 
+.PHONY : precommit
+precommit :
+	isort .
+	black .
+	flake8 .
+	mypy .
+	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ metroscore/
+
 .PHONY: setup-dev
 setup-dev:
 	python3 -m venv .venv
