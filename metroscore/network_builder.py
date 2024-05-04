@@ -1,7 +1,6 @@
 import os
 import warnings
-from functools import partial
-from typing import List, Tuple
+from typing import Dict, List, Set, Tuple
 
 import geopandas as gpd
 import networkx as nx
@@ -9,12 +8,8 @@ import osmnx as ox
 import pandas as pd
 import partridge as ptg
 from partridge.gtfs import Feed
-from pyproj import CRS
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
-
-# Default walking speed in mph. Used to define the buffer for reachable area around nodes/edges
-DEFAULT_WALK_SPEED = 3
 
 WALK_TOLERANCE = 30
 # NOTE: buffer will be built around nodes for all networks
@@ -58,7 +53,10 @@ def split_linestring_with_points(ls: LineString, p: List[Point]) -> List[LineStr
     # sort projections
     projections.sort()
     # split lineßstring
-    lines = [substring(ls, projections[i], projections[i + 1]) for i in range(len(projections) - 1)]
+    lines = [
+        substring(ls, projections[i], projections[i + 1])
+        for i in range(len(projections) - 1)
+    ]
     return lines
 
 
@@ -70,29 +68,92 @@ def make_edges(df: pd.DataFrame, use_real_route_shapes: bool = True) -> pd.DataF
             "v": df["stop_id"].values[1:],
             "key": 0,
             "geometry": [
-                LineString([df["stop_geometry"].values[i], df["stop_geometry"].values[i + 1]])
+                LineString(
+                    [df["stop_geometry"].values[i], df["stop_geometry"].values[i + 1]]
+                )
                 for i in range(len(df) - 1)
             ],
             "length": [
-                df["stop_geometry"].values[i].distance(df["stop_geometry"].values[i + 1])
+                df["stop_geometry"]
+                .values[i]
+                .distance(df["stop_geometry"].values[i + 1])
                 for i in range(len(df) - 1)
             ],
-            "travel_time": df["departure_time"].values[1:] - df["departure_time"].values[:-1],
+            "travel_time": df["departure_time"].values[1:]
+            - df["departure_time"].values[:-1],
         },
         index=None,
     )
     if use_real_route_shapes:
-        ls = df["trip_geometry"].values[0]  # needs error handling for multiple geometries
+        # needs error handling for multiple geometries
+        ls = df["trip_geometry"].values[0]
         edges = split_linestring_with_points(ls, df["stop_geometry"].tolist())
         res = res.assign(geometry=edges)
         res = res.assign(length=list(map(lambda x: x.length, edges)))
     return res
 
 
-fast_make_edges = partial(make_edges, use_real_route_shapes=False)
+def _dedupe_per_stop_name(group, tol):
+    if group.shape[0] == 1:
+        group["deduped_stops"] = [set()]
+        return group
+    indexes_to_skip = []
+    processed_indexes = []
+    curr_deduped_indexes: Set[str] = set()
+    deduped_stops = []
+
+    for index, row in group.iterrows():
+        geom = row["geometry"]
+        curr_deduped_indexes.clear()
+        if index not in indexes_to_skip:
+            processed_indexes.append(index)
+            indexes_to_skip.append(index)
+            for other_index, other_row in group.iterrows():
+                other_geom = other_row["geometry"]
+                if other_index in indexes_to_skip:
+                    pass
+                else:
+                    if geom.distance(other_geom) < tol:
+                        indexes_to_skip.append(other_index)
+                        curr_deduped_indexes.add(other_index)
+                    else:
+                        pass
+        deduped_stops.append(curr_deduped_indexes.copy())
+    output_gs = group.assign(deduped_stops=deduped_stops).loc[processed_indexes].copy()
+    return output_gs
 
 
-def build_edge_and_node_gdf(feed: Feed) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+def deduplicate_stops(stops, tol=100):
+    """
+    Combine stops if they are within `tol` meters of each other and they have the same name
+    If not, give them each a unique name by adding a number to the end
+
+    Returns a DataFrame with the deduplicated stops and a dict that maps the original
+    stop names to the new stop names
+    """
+    stops = stops.copy()
+    deduplicated_stops = stops.groupby("stop_name").apply(
+        _dedupe_per_stop_name,
+        tol=tol,
+    )
+    deduplicated_stops.index = deduplicated_stops.index.get_level_values("stop_id")
+    original_stop_to_deduped_stop = {
+        value: key
+        for key, values in zip(
+            deduplicated_stops.index,
+            deduplicated_stops["deduped_stops"],
+        )
+        for value in values
+    }
+    return (
+        deduplicated_stops.drop(columns="deduped_stops"),
+        original_stop_to_deduped_stop,
+    )
+
+
+def build_edge_and_node_gdf(
+    feed: Feed,
+) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, Dict[str | int, str | int]]:
     combined = (
         feed.stop_times[["trip_id", "stop_id", "departure_time", "stop_sequence"]]
         .merge(feed.trips[["trip_id", "shape_id"]], on="trip_id", how="left")
@@ -107,7 +168,7 @@ def build_edge_and_node_gdf(feed: Feed) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFr
         )
         .merge(
             (
-                feed.stops[["stop_id", "geometry"]]
+                feed.stops[["stop_id", "stop_name", "geometry"]]
                 .rename(columns={"geometry": "stop_geometry"})
                 .dropna(subset=["stop_geometry"])
             ),
@@ -116,20 +177,37 @@ def build_edge_and_node_gdf(feed: Feed) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFr
         )
     )
     # confirm each trip only has one associated shape
-    print(combined.groupby("trip_id").apply(lambda x: x["shape_id"].nunique()).max() == 1)
+    assert (
+        combined.groupby("trip_id").apply(lambda x: x["shape_id"].nunique()).max() == 1
+    )
+    nodes_gdf, node_deduplication_mapping = deduplicate_stops(
+        feed.stops[["stop_id", "stop_name", "geometry"]]
+        .set_index("stop_id")
+        .to_crs(3857),
+        tol=250,
+    )
+    nodes_gdf = nodes_gdf.to_crs(4326)
+    nodes_gdf["x"] = [p.x for p in nodes_gdf["geometry"]]
+    nodes_gdf["y"] = [p.y for p in nodes_gdf["geometry"]]
+
+    combined = combined.assign(
+        stop_id=combined["stop_id"].map(lambda x: node_deduplication_mapping.get(x, x)),
+    )
     edges_gdf = (
         combined.groupby("trip_id")
-        .apply(fast_make_edges)
+        .apply(make_edges, use_real_route_shapes=False)
         .set_index(["u", "v", "key"])
         .drop_duplicates()
     )
-    nodes_gdf = feed.stops[["stop_id", "geometry"]].set_index("stop_id")
-    nodes_gdf["x"] = nodes_gdf["geometry"].x
-    nodes_gdf["y"] = nodes_gdf["geometry"].y
+
+    # fiter edges to only those that have a node in nodes_gdf
+    edges_gdf = edges_gdf[
+        edges_gdf.index.get_level_values("u").isin(nodes_gdf.index)
+        & edges_gdf.index.get_level_values("v").isin(nodes_gdf.index)
+    ]
 
     # attach crs
-    crs = CRS.from_user_input(4326)
-    nodes_gdf.crs = crs
-    edges_gdf.crs = crs
+    nodes_gdf = gpd.GeoDataFrame(data=nodes_gdf, geometry="geometry", crs=4326)
+    edges_gdf = gpd.GeoDataFrame(data=edges_gdf, geometry="geometry", crs=4326)
 
-    return nodes_gdf, edges_gdf
+    return nodes_gdf, edges_gdf, node_deduplication_mapping

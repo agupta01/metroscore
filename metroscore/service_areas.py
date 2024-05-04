@@ -1,171 +1,227 @@
-import logging
-import os
+from typing import Any, Dict, List, Optional, Set
 
+import geopandas as gpd
+import numpy as np
 import pandas as pd
-from arcgis.features import Feature, FeatureSet
-from arcgis.geometry import project
-from arcgis.geoprocessing import LinearUnit
-from arcgis.gis import GIS
-from arcgis.network.analysis import generate_service_areas
+from networkx import MultiGraph
+from shapely import unary_union
+from shapely.geometry import MultiPolygon, Polygon
+
+# Default walking speed in m/s. Used to define the buffer for reachable area around nodes/edges
+DEFAULT_WALK_SPEED = 1.42
 
 
-def get_metro_service_areas(
-    nd_path, points, cutoffs=[10, 20, 30, 40, 50, 60], time_of_day=None, verbose=0
+def validate_adjacency_matrix(adj: np.ndarray):
+    """
+    Validate the adjacency matrix for Modified Floyd-Warshall algorithm.
+    """
+    n, k = adj.shape
+    if n != k:
+        raise ValueError("Adjacency matrix must be square.")
+    if not np.allclose(np.diagonal(adj), 0):
+        raise ValueError("Diagonal elements of adjacency matrix must be zero.")
+
+
+def floyd_warshall_fast(adj: np.ndarray) -> np.ndarray:
+    validate_adjacency_matrix(adj)
+
+    for k in range(adj.shape[0]):
+        adj = np.minimum(adj, adj[np.newaxis, k, :] + adj[:, k, np.newaxis])
+
+    return adj
+
+
+def floyd_warshall_slow(adj: np.ndarray) -> np.ndarray:
+    # validate_adjacency_matrix(adj)
+
+    n = adj.shape[0]
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                adj[i, j] = min(adj[i, j], adj[i, k] + adj[k, j])
+
+    return adj
+
+
+def time_dependent_dijkstra(
+    G: MultiGraph,
+    timetable: pd.Series,
+    start_time: float,
+    origin_id: Any,
+) -> Dict[int, float]:
+    """
+    Implements a modified Djikstra algorithm that finds the time-dependent shortest path from
+    origin node to all other nodes in the graph.
+
+    Args:
+        G (Graph): NetworkX Graph object.
+        stop_times (pd.Series): Departure times. Index is a tuple of (from, to)
+            node IDs. Values are in seconds (since midnight.)
+        start_time (float): Current time.
+        origin_id (Any): Origin node ID.
+
+    Returns:
+        Dict[int, float]: Dictionary of node IDs and arrival times, in seconds.
+
+    Based on algorithm outlined in Stephen Boyles' lecture:
+    https://sboyles.github.io/teaching/ce392d/8-tdsp.pdf
+    """
+    # Initialization step
+    N = len(G.nodes)
+    L = {_id: np.inf for _id in G.nodes}  # travel time from origin to node
+    q = {_id: -1 for _id in G.nodes}  # q is the predecessor node
+    F: Set[int] = set()  # set of settled nodes
+
+    L[origin_id] = start_time
+
+    while len(F) < N:
+        curr_id = min(((x, y) for x, y in L.items() if x not in F), key=lambda x: x[1])[
+            0
+        ]
+        curr_time = L[curr_id]
+        F.add(curr_id)
+        for candidate_id in G.neighbors(curr_id):
+            if candidate_id in F:
+                continue
+            # wait time is next departure time - current time in day
+            wait_time = get_next_departure_time(
+                curr_time,
+                curr_id,
+                candidate_id,
+                timetable,
+            ) - (curr_time % 86400)
+            try:
+                travel_time = G.get_edge_data(curr_id, candidate_id)["travel_time"]
+            except KeyError:
+                travel_time = G.get_edge_data(curr_id, candidate_id, key=0)[
+                    "travel_time"
+                ]
+            if L[candidate_id] > curr_time + travel_time + wait_time:
+                L[candidate_id] = curr_time + travel_time + wait_time
+                q[candidate_id] = curr_id
+
+    return L
+
+
+def make_timetable(stop_times: pd.DataFrame) -> pd.Series:
+    def _rollup(df):
+        df = df.sort_values("stop_sequence", ascending=True)
+        return pd.DataFrame(
+            {
+                "from": df["stop_id"].values[:-1],
+                "to": df["stop_id"].values[1:],
+                "departure_time": df["departure_time"].values[:-1],
+            },
+            index=None,
+        )
+
+    return (
+        stop_times.groupby("trip_id")
+        .apply(_rollup)
+        .reset_index(drop=True)
+        .groupby(["from", "to"])
+        .apply(lambda x: sorted(x["departure_time"].values))
+    )
+
+
+def get_next_departure_time(
+    curr_time: float,
+    origin_id: int,
+    dest_id: int,
+    timetable: pd.Series,
 ):
     """
-    Generate transit service areas for given points.
-
-    :param nd_path: string, path to network dataset in gdb.
-    :type nd_path: str
-    :param points: list of (longitude, latitude) points at which to evaluate service areas.
-    :type points: list[tuple[float, float]]
-    :param cutoffs: list of minutes at which to generate service areas.
-    Each service area will be from [0 - cutoff] for all cutoffs.
-    :type cutoffs: list[int]
-    :param time_of_day: datetime object to specify date and time of service area analysis.
-    Default is None so analysis is time-agnostic.
-    :type time_of_day: datetime.datetime
-    :param verbose: turn on debug logging if set to 1. Default is 0.
-    :type verbose: int
-    :return: SEDF with (len(points) * len(cutoffs)) rows. Each row corresponds to one location at one cutoff time.
-    :rtype: pandas.DataFrame
+    Get the departure time from origin node to destination node.
     """
-    import arcpy
-    import arcpy.nax as nax
-
-    logger = logging.getLogger()
-    if verbose == 1:
-        logger.setLevel(logging.DEBUG)
-
-    # make network dataset a layer. if it exists, use the existing one
-    nd_layer_name = os.path.basename(nd_path)
-    try:
-        nax.MakeNetworkDatasetLayer(nd_path, nd_layer_name)
-    except Exception:
-        logger.debug(f"Network Dataset Layer already exists. Using {nd_layer_name}.")
-    # get public transit mode
-    try:
-        nd_travel_modes = nax.GetTravelModes(nd_layer_name)
-        transit_mode = nd_travel_modes["Public transit time"]
-        logger.debug("Network Dataset Layer loaded and public transit travel mode found.")
-    except KeyError:
-        raise ValueError(
-            f"Public Transit travel mode is not in network dataset. \
-                Available transit modes include: {arcpy.nax.GetTravelModes(nd_layer_name)}"
-        )
-
-    # Instantiate a ServiceArea solver object
-    service_area = nax.ServiceArea(nd_layer_name)
-    # Set properties
-    service_area.timeUnits = nax.TimeUnits.Minutes
-    service_area.defaultImpedanceCutoffs = cutoffs
-    service_area.travelMode = transit_mode
-    service_area.timeOfDay = time_of_day
-    service_area.geometryAtCutoff = nax.ServiceAreaPolygonCutoffGeometry.Disks
-    service_area.outputType = nax.ServiceAreaOutputType.Polygons
-    service_area.geometryAtOverlap = nax.ServiceAreaOverlapGeometry.Overlap
-    service_area.polygonBufferDistanceUnits = nax.DistanceUnits.Meters
-    service_area.polygonBufferDistance = 10.0
-
-    logger.debug("Service Area solver created.")
-
-    input_data = [[str(i + 1), lon, lat] for i, (lon, lat) in enumerate(points)]
-
-    fields = ["Name", "SHAPE@"]
-
-    # add facilities to Service Area solver object
-    crs = arcpy.Describe(nd_path).spatialReference
-    with service_area.insertCursor(nax.ServiceAreaInputDataType.Facilities, fields) as cur:
-        for input_pt in input_data:
-            pt_geom = arcpy.PointGeometry(
-                arcpy.Point(input_pt[1], input_pt[2]), arcpy.SpatialReference(4326)
-            ).projectAs(arcpy.SpatialReference(crs.factoryCode))
-            cur.insertRow([input_pt[0], pt_geom])
-
-    logger.debug("Facilities added.")
-
-    # Solve the analysis
-    result = service_area.solve()
-
-    if not result.solveSucceeded:
-        raise RuntimeError(
-            f"Service Area solver failed with messages: {result.solverMessages(nax.MessageSeverity.All)}"
-        )
-
-    logger.debug(
-        f"Service Areas solved. Computed {result.count(nax.ServiceAreaOutputDataType.Polygons)} polygons."
+    daily_curr_time = curr_time % 86000
+    # binary insert the current time into the timetable for origin to destination
+    if (origin_id, dest_id) not in timetable.index:
+        return curr_time  # no timetable for this route, assume no wait time
+    timetable_for_route = timetable.loc[(origin_id, dest_id)]
+    next_departure_time_idx = np.searchsorted(
+        timetable_for_route,
+        daily_curr_time,
+        side="left",
     )
-
-    # export to layer
-    result_path = os.path.join(os.path.dirname(nd_path), "TransitServiceAreas")
-    result.export(nax.ServiceAreaOutputDataType.Polygons, result_path)
-    # convert to sedf
-    sedf = pd.DataFrame.spatial.from_featureclass(result_path).astype({"ToBreak": int})
-    # project polygons back to 4326
-    if sedf.spatial.sr["latestWkid"] != 4326:
-        sedf["SHAPE"] = project(
-            geometries=sedf["SHAPE"].tolist(),
-            in_sr=sedf.spatial.sr,
-            out_sr={"wkid": 4326, "latestWkid": 4326},
-        )
-
-    # return only the necessary columns
-    return sedf[["Name", "ToBreak", "SHAPE"]]
+    if next_departure_time_idx == len(timetable_for_route):
+        return timetable_for_route[0]  # wrap around if we miss last transit of day
+    return timetable_for_route[next_departure_time_idx]
 
 
-def get_drive_time_service_areas(
-    points, cutoffs=[10, 20, 30, 40, 50, 60], time_of_day=None, gis=GIS(), verbose=0
-):
+def get_transit_areas(
+    travel_times: Dict[int, float],
+    cutoffs: List[float],
+    node_gdf: gpd.GeoDataFrame,
+    use_walking_buffer: bool = False,
+) -> gpd.GeoDataFrame:
     """
-    Generate transit service areas for given points.
+    Get the polygons of reachable areas from a given origin.
 
-    :param points: list of (longitude, latitude) points at which to evaluate service areas.
-    :type points: list[tuple[float, float]]
-    :param cutoffs: list of minutes at which to generate service areas.
-    Each service area will be from [0 - cutoff] for all cutoffs.
-    :type cutoffs: list[int]
-    :param time_of_day: datetime object to specify date and time of service area analysis.
-    Default is None so analysis is time-agnostic.
-    :type time_of_day: datetime.datetime
-    :param gis: GIS environment to use.
-    :type gis: arcgis.gis.GIS
-    :param verbose: turn on debug logging if set to 1. Default is 0.
-    :type verbose: int
-    :return: SEDF with (len(points) * len(cutoffs)) rows. Each row corresponds to one location at one cutoff time.
-    :rtype: pandas.DataFrame
+    Args:
+        travel_times (Dict[int, float]): Dictionary of node IDs and travel times.
+        cutoffs (List[float]): List of travel time cutoffs.
+        node_gdf (gpd.GeoDataFrame): GeoDataFrame of nodes and their locations (Points).
+            Should be indexed by stop_id.
+        use_walking_buffer (bool, optional): Whether to use a walking buffer around nodes.
+            Defaults to False. If true, buffers are computed around all reachable nodes
+            using the remaining time until the cutoff is reached. This can result in
+            overly "spherical" transit areas that ignore geographical features
+            like bodies of water. If false, the buffer around each reachable node
+            is constant and small. When used with a properly configured graph that
+            contains walking nodes, this can result in more realistic transit areas.
+
+
+    Note that it is assumed that the travel times in `travel_times` and `cutoffs`
+    are in the same units.
+
+    Returns:
+        GeoSeries of travel time cutoffs and reachable areas.
     """
-    logger = logging.getLogger()
-    if verbose == 1:
-        logger.setLevel(logging.DEBUG)
 
-    # create points Feature Set
-    feat_points = [Feature(geometry={"x": p[0], "y": p[1]}) for p in points]
+    # TODO: this can be optimized by appending to exisiting unary union for each new
+    # cutoff value
+    def _get_reachable_polygon_for_cutoff(
+        cutoff: float,
+    ) -> Optional[Polygon | MultiPolygon]:
+        reachable = list(filter(lambda x: x[1] < cutoff, travel_times.items()))
+        if not reachable:
+            return None
+        if use_walking_buffer:
+            reachable_with_buffers = list(
+                map(
+                    lambda x: (x[0], x[1], DEFAULT_WALK_SPEED * (cutoff - x[1])),
+                    reachable,
+                )
+            )
+        else:  # use constant buffer
+            reachable_with_buffers = list(
+                map(lambda x: (x[0], x[1], DEFAULT_WALK_SPEED * 60), reachable)
+            )
+        reachable_with_buffers = pd.DataFrame(
+            reachable_with_buffers,
+            columns=["stop_id", "time_to_node", "buffer_at_node"],
+        ).set_index("stop_id")
+        reachable_with_buffers = reachable_with_buffers.merge(
+            node_gdf[["geometry"]],
+            left_index=True,
+            right_index=True,
+            how="left",
+        )
+        reachable_with_buffers = gpd.GeoDataFrame(
+            reachable_with_buffers, geometry="geometry", crs=node_gdf.crs
+        )
+        reachable_with_buffers = reachable_with_buffers.to_crs(3857)
+        reachable_with_buffers["buffered"] = reachable_with_buffers["geometry"].buffer(
+            reachable_with_buffers["buffer_at_node"]
+        )
+        return unary_union(reachable_with_buffers["buffered"])
 
-    fset = FeatureSet(
-        feat_points,
-        geometry_type="esriGeometryPoint",
-        spatial_reference={"wkid": 4326, "latestWkid": 4326},
+    reachable_areas = {
+        cutoff: _get_reachable_polygon_for_cutoff(cutoff) for cutoff in cutoffs
+    }
+    # return reachable_areas
+
+    return gpd.GeoSeries(
+        data=reachable_areas,
+        crs=node_gdf.crs,
     )
-
-    logger.debug("Created Point Feature Set.")
-    # solve service area
-    drive_result = generate_service_areas(
-        facilities=fset,
-        break_values=" ".join(map(str, cutoffs)),
-        analysis_region="NorthAmerica",
-        time_of_day=time_of_day,
-        use_hierarchy=True,
-        polygon_overlap_type="Disks",
-        polygon_trim_distance=LinearUnit(10, "Meters"),
-    )
-
-    logger.debug("Solved Service Areas.")
-
-    # create feature set of output polygons
-    service_area_fset = drive_result.service_areas
-
-    # convert to SEDF
-    drive_sedf = service_area_fset.sdf
-    drive_sedf["Name"] = drive_sedf["Name"].str.replace("Location ", "")
-
-    return drive_sedf[["Name", "ToBreak", "SHAPE"]]

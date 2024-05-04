@@ -1,11 +1,11 @@
 import warnings
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import osmnx as ox
-from networkx import Graph
+from networkx import Graph, MultiGraph
 from shapely.geometry import LineString, Point
 
 OSMEdge = Tuple[int, int, Dict]  # (u_id, v_id, data)
@@ -17,20 +17,30 @@ class MergeMapping:
     """
     Defines mapping of nodes in graph a to nodes/edges in graph b.
 
-    Typically, graph a is a graph with higher precedence than graph b (i.e. buses to walking).
-    In this case it would make sense to merge nodes in graph a to edges in graph b but not
-    vice versa.
-
     Attributes:
-        n2n: Dict[int, OSMNode]
+        n2n: Dict[int, Tuple[int, float]]
             Mapping of nodes ids in graph a to node ids in graph b, along with their distances.
-        n2e: Dict[int, OSMEdge]
+        n2e (Optional): Dict[int, Tuple[Tuple[int, int], float]
             Mapping of node ids in graph a to (node id, node id) edges in graph b,
             along with distances.
+        e2n (Optional): Dict[Tuple[int, int], Tuple[int, float]]
+            Mapping of (node id, node id) edges in graph a to node ids in graph b,
+            along with distances.
+        e2e (Optional): Dict[Tuple[int, int], Tuple[Tuple[int, int], float]]
+            Mapping of (node id, node id) edges in graph a to (node id, node id) edges in graph b,
+            along with distances.
+
     """
 
     n2n: Dict[int, Tuple[int, float]]
-    n2e: Dict[int, Tuple[Tuple[int, int], float]]
+    n2e: Optional[Dict[int, Tuple[Tuple[int, int], float]]] = None
+    e2n: Optional[Dict[Tuple[int, int], Tuple[int, float]]] = None
+    e2e: Optional[Dict[Tuple[int, int], Tuple[Tuple[int, int], float]]] = None
+
+    def __iter__(self):
+        return iter(
+            filter(lambda x: x is not None, [self.n2n, self.n2e, self.e2n, self.e2e])
+        )
 
 
 @dataclass
@@ -52,7 +62,7 @@ class NodeToEdgeMergeResult:
     partitioned_edges: List[OSMEdge]
 
 
-def __fill_missing_geometries(graph: Graph) -> Graph:
+def __fill_missing_geometries(graph):
     """Fill missing edge geometries in graph using the geometry of the nodes."""
     n, e = ox.graph_to_gdfs(graph, nodes=True, edges=True, fill_edge_geometry=True)
     return ox.graph_from_gdfs(n, e)
@@ -80,8 +90,8 @@ def get_merge_mapping(a: Graph, b: Graph) -> MergeMapping:
     Distances will be returned in meters.
     """
     # project graph if not done so
-    a = ox.project_graph(a, to_latlong=True)
-    b = ox.project_graph(b, to_latlong=True)
+    a = ox.project_graph(a, to_crs=3857)
+    b = ox.project_graph(b, to_crs=3857)
     Xs = []
     Ys = []
     for _id, node in a.nodes(data=True):
@@ -108,9 +118,12 @@ def merge_node_to_node(a: OSMNode, b: OSMNode) -> OSMEdge:
         a[0],
         b[0],
         {
-            "geometry": LineString([Point(a[1]["x"], a[1]["y"]), Point(b[1]["x"], b[1]["y"])]),
+            "geometry": LineString(
+                [Point(a[1]["x"], a[1]["y"]), Point(b[1]["x"], b[1]["y"])]
+            ),
             "length": 0.0,
             "joined": True,
+            "travel_time": 0.0,  # instant transfer assumed
         },
     )
 
@@ -143,8 +156,11 @@ def merge_edge_to_node(edge: OSMEdge, node: OSMNode) -> NodeToEdgeMergeResult:
         u,
         projected_node[0],
         {
-            "geometry": LineString([edge_geom.coords[0], projected_node_geom.coords[0]]),
+            "geometry": LineString(
+                [edge_geom.coords[0], projected_node_geom.coords[0]]
+            ),
             "length": edge_length * ratio,
+            "travel_time": data.get("travel_time", 0.0) * ratio,
             **{k: v for k, v in data.items() if k not in ["geometry", "length"]},
         },
     )
@@ -152,8 +168,11 @@ def merge_edge_to_node(edge: OSMEdge, node: OSMNode) -> NodeToEdgeMergeResult:
         projected_node[0],
         v,
         {
-            "geometry": LineString([projected_node_geom.coords[0], edge_geom.coords[-1]]),
+            "geometry": LineString(
+                [projected_node_geom.coords[0], edge_geom.coords[-1]]
+            ),
             "length": edge_length * (1 - ratio),
+            "travel_time": data.get("travel_time", 0.0) * (1 - ratio),
             **{k: v for k, v in data.items() if k not in ["geometry", "length"]},
         },
     )
@@ -163,9 +182,12 @@ def merge_edge_to_node(edge: OSMEdge, node: OSMNode) -> NodeToEdgeMergeResult:
             projected_node[0],
             node[0],
             {
-                "geometry": LineString([projected_node_geom, Point(node[1]["x"], node[1]["y"])]),
+                "geometry": LineString(
+                    [projected_node_geom, Point(node[1]["x"], node[1]["y"])]
+                ),
                 "length": 0.0,
                 "joined": True,
+                "travel_time": 0.0,  # instant transfer assumed
             },
         ),
         partitioned_edges=[new_edge1, new_edge2],
@@ -185,7 +207,9 @@ def add_new_edge_to_graph(graph: Graph, edge: OSMEdge) -> None:
     graph.add_edge(edge[0], edge[1], **edge[2])
 
 
-def merge_dicts_on_key(a: dict, b: dict, overwrite_if: Callable[[Any, Any], bool]) -> dict:
+def merge_dicts_on_key(
+    a: dict, b: dict, overwrite_if: Callable[[Any, Any], bool]
+) -> dict:
     """Merge dict `b` into dict `a`. When encountering a key that already exists in `a`,
     take the values of the conflicting key and compare them using a function `key`.
     If the output of the `key` function is True, prefer the original value from `a`.
@@ -207,7 +231,13 @@ def merge_dicts_on_key(a: dict, b: dict, overwrite_if: Callable[[Any, Any], bool
     return merged
 
 
-def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
+def merge_graphs(
+    a: Optional[MultiGraph],
+    other: MultiGraph,
+    tol: float = 100.0,
+    a_board_anywhere: bool = False,
+    b_board_anywhwere: bool = False,
+) -> MultiGraph:
     """Merge `other` into `a` by connecting nodes and edges that are within
     `tol` meters of each other.
 
@@ -218,25 +248,42 @@ def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
             Tolerance in meters for merging nodes and edges. A good heuristic is to set this
             to the number of meters an average person would be willing to walk on "non-walkable"
             surfaces (i.e. through a grassy field or parking lot).
+        a_board_anywhere: bool, default False.
+            If true, edges in `a` will be considered as potential boarding edges. This means that
+            nodes in `other` will be merged to edges in `a` if they are within `tol` meters of the
+            edge.
+        b_board_anywhere: bool, default False.
+            If true, edges in `other` will be considered as potential boarding edges. This means that
+            nodes in `a` will be merged to edges in `other` if they are within `tol` meters of the
+            edge. Note that if both `a_board_anywhere` and `b_board_anywhere` are set to True, the
+            function will merge edges in `a` to edges in `other` along intersection points
+            (ignoring `tol` for now).
 
     Returns:
         MultiDiGraph: Merged graph.
     """
+    # statement to allow chaining of merge_graph calls
+    if a is None:
+        return other
+    # project both graphs to a common CRS that can be used for distance calculations
+    a = ox.project_graph(a, to_crs=3857)
+    other = ox.project_graph(other, to_crs=3857)
     # fill missing geometries for both graphs. This implicitly deep copies the graphs as well.
     G = __fill_missing_geometries(a)
     G_O = __fill_missing_geometries(other)
 
     mapping = get_merge_mapping(a=G, b=G_O)
+    # print(mapping)
     # If a node can merge to an edge or a node, prefer the closest distance merge candidate
     # If still tied, prefer the node
-    all_merges = merge_dicts_on_key(
-        mapping.n2n, mapping.n2e, overwrite_if=lambda a, b: a[-1] > b[-1]
-    )
+    # overwrite_func = lambda a, b: a[-1] > b[-1]
+    # all_merges = merge_dicts_on_key(*mapping, overwrite_if=overwrite_func)  # type: ignore
+    all_merges = mapping.n2n  # only use n2n for now
     # merge nodes in O that are within tol of a
     new_nodes = []
     for n1, to_merge in all_merges.items():
         n2, dist = to_merge[0], to_merge[1]
-        print(n1, n2, dist)
+        # print(n1, n2, dist)
         if isinstance(n2, tuple) and len(n2) == 2:
             # Is edge
             if dist < tol:
@@ -252,18 +299,21 @@ def merge_graphs(a: Graph, other: Graph, tol: float = 100.0) -> Graph:
                 # Keep original edge in O because it may be in all_merges
                 add_new_edge_to_graph(G_O, merge_result.partitioned_edges[0])
                 add_new_edge_to_graph(G_O, merge_result.partitioned_edges[1])
-
-        elif isinstance(n2, int):
+        elif isinstance(n2, int) or isinstance(n2, str):
             # Is node
             if dist < tol:
-                new_edge: OSMEdge = merge_node_to_node(
-                    a=prep_node_tuple(G, n1), b=prep_node_tuple(G_O, n2)
-                )
+                a1 = prep_node_tuple(G, n1)
+                b1 = prep_node_tuple(G_O, n2)
+                # print(a1, b1)
+                new_edge: OSMEdge = merge_node_to_node(a=a1, b=b1)
+                # print(new_edge)
+                reverse_edge = (new_edge[1], new_edge[0], new_edge[2])
                 add_new_edge_to_graph(G, new_edge)
+                add_new_edge_to_graph(G, reverse_edge)
                 new_nodes.append(new_edge[1])
         else:
             raise ValueError(f"Invalid merge mapping from {n1} to {to_merge}")
-    print(len(new_nodes))
+    # print(len(new_nodes))
     G.add_nodes_from(G_O.nodes(data=True))
     G.add_edges_from(G_O.edges(data=True))
     return G
