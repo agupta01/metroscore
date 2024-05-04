@@ -44,7 +44,9 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
     )  # when the difference is a null set arcgis returns NaN
 
     # compute TDTC and TB
-    joined_sa["TDTC"] = (joined_sa["area(D)"] - joined_sa["area(D - T)"]) / joined_sa["area(D)"]
+    joined_sa["TDTC"] = (joined_sa["area(D)"] - joined_sa["area(D - T)"]) / joined_sa[
+        "area(D)"
+    ]
     joined_sa["TB"] = joined_sa["area(T - D)"] / joined_sa["area(D)"]
 
     # compute final metroscore

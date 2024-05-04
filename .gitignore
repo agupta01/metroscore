@@ -50,3 +50,6 @@ __pycache__
 docs/build
 site/
 data/
+
+# don't upload graphml files (they're too big)
+*.graphml
