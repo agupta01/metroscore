@@ -43,3 +43,11 @@ packaging
 
 # Notebook stuff
 notebook
+contextily
+seaborn
+
+# For visualizing data on an interactive map
+folium
+
+# OSMNX explore function dependency
+mapclassify
