@@ -5,7 +5,7 @@ import pandas as pd
 from metroscore.service_areas import (
     floyd_warshall_fast,
     floyd_warshall_slow,
-    time_dependent_djikstra,
+    time_dependent_dijkstra,
 )
 
 
@@ -50,7 +50,7 @@ def test_tdsp_djikstra():
     )
     start_time = 4
     origin_id = 1
-    result = time_dependent_djikstra(G, timetable, start_time, origin_id)
+    result = time_dependent_dijkstra(G, timetable, start_time, origin_id)
 
     assert result[1] == 4
     assert result[2] == 10
@@ -77,7 +77,7 @@ def test_tdsp_djikstra_every_other_second():
     )
     start_time = 4
     origin_id = 1
-    result = time_dependent_djikstra(G, timetable, start_time, origin_id)
+    result = time_dependent_dijkstra(G, timetable, start_time, origin_id)
 
     assert result[1] == 4
     assert result[2] == 10

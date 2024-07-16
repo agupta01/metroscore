@@ -103,27 +103,6 @@ def time_dependent_dijkstra(
     return L
 
 
-def make_timetable(stop_times: pd.DataFrame) -> pd.Series:
-    def _rollup(df):
-        df = df.sort_values("stop_sequence", ascending=True)
-        return pd.DataFrame(
-            {
-                "from": df["stop_id"].values[:-1],
-                "to": df["stop_id"].values[1:],
-                "departure_time": df["departure_time"].values[:-1],
-            },
-            index=None,
-        )
-
-    return (
-        stop_times.groupby("trip_id")
-        .apply(_rollup)
-        .reset_index(drop=True)
-        .groupby(["from", "to"])
-        .apply(lambda x: sorted(x["departure_time"].values))
-    )
-
-
 def get_next_departure_time(
     curr_time: float,
     origin_id: int,

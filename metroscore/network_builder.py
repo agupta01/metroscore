@@ -1,4 +1,3 @@
-import os
 import warnings
 from typing import Dict, List, Set, Tuple
 
@@ -11,31 +10,52 @@ from partridge.gtfs import Feed
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
-WALK_TOLERANCE = 30
-# NOTE: buffer will be built around nodes for all networks
-# Will also be built around edges in road network where passenger can stop on those edges
-# Working off assumption that transit vehicles only stop on nodes (note exceptions like MTA late night bus service)
+from metroscore.constants import DEFAULT_WALK_SPEED
+from metroscore.utils import merge_graphs
 
 
-def build_road_network(region: str) -> nx.MultiDiGraph:
-    G = ox.graph_from_place(query=region, network_type="drive", retain_all=True)
-    G = ox.project_graph(G)
-    G = ox.add_edge_speeds(G)
-    G = ox.add_edge_travel_times(G)
-    return G
+def build_walk_graph(region: str) -> nx.MultiDiGraph:
+    walk_graph = ox.graph_from_place(
+        query=region,
+        retain_all=False,
+        truncate_by_edge=True,
+        simplify=True,
+        network_type="walk",
+    )
+    walk_graph = ox.project_graph(walk_graph)
+    nx.set_edge_attributes(
+        walk_graph, DEFAULT_WALK_SPEED * (60**2 / 1000), name="speed_kph"
+    )
+    walk_graph = ox.add_edge_travel_times(walk_graph)
+    return walk_graph
 
 
-def build_transit_network(region: str, gtfs: os.PathLike) -> nx.MultiDiGraph:
-    W = ox.graph_from_place(query=region, network_type="walk", retain_all=True)
-    # B = ox.graph_from_place(query=region, network_type="bike", retain_all=True)
-    # R = ox.graph_from_place(query=region, retain_all=True, custom_filter='["railway"~"subway"]')
-    # TODO: import GTFS and filter roads to just those which have bus routes
-    return W
+def load_network_and_timetable(**kwargs: Feed | nx.MultiDiGraph):
+    transit_graph = None
+    timetable = None
+    for mode, feed in kwargs.items():
+        print(f"Importing {mode} data...")
+        if isinstance(feed, nx.MultiDiGraph):
+            G = feed
+        else:
+            node_gdf, edge_gdf, mapping = build_edge_and_node_gdf(feed)
+            print(f"{mode}: \t{node_gdf.shape[0]} nodes \t{edge_gdf.shape[0]} edges")
+            G = ox.graph_from_gdfs(node_gdf, edge_gdf)
+            _timetable = make_timetable(
+                feed.stop_times.assign(
+                    stop_id=feed.stop_times["stop_id"].map(lambda x: mapping.get(x, x))
+                )
+            )
+            timetable = pd.concat([timetable, _timetable])
+        G = ox.project_graph(G, to_latlong=True)
+
+        # append to transit_graph
+        transit_graph = merge_graphs(a=transit_graph, other=G)
+    return transit_graph, timetable
 
 
 def build_building_network(region: str) -> nx.MultiDiGraph:
-    # TODO: implement
-    return nx.MultiDiGraph()
+    raise NotImplementedError("Building footprints not yet implemented")
 
 
 def load_gtfs_feed(gtfs: str) -> Feed:
@@ -91,6 +111,27 @@ def make_edges(df: pd.DataFrame, use_real_route_shapes: bool = True) -> pd.DataF
         res = res.assign(geometry=edges)
         res = res.assign(length=list(map(lambda x: x.length, edges)))
     return res
+
+
+def make_timetable(stop_times: pd.DataFrame) -> pd.Series:
+    def _rollup(df):
+        df = df.sort_values("stop_sequence", ascending=True)
+        return pd.DataFrame(
+            {
+                "from": df["stop_id"].values[:-1],
+                "to": df["stop_id"].values[1:],
+                "departure_time": df["departure_time"].values[:-1],
+            },
+            index=None,
+        )
+
+    return (
+        stop_times.groupby("trip_id")
+        .apply(_rollup)
+        .reset_index(drop=True)
+        .groupby(["from", "to"])
+        .apply(lambda x: sorted(x["departure_time"].values))
+    )
 
 
 def _dedupe_per_stop_name(group, tol):

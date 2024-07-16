@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=False):
+def compute_metroscore(transit_areas, drive_areas, bonus_weight=2.0, return_all=False):
     """
     Computes the row-wise metroscore for each computed service area.
 
@@ -25,23 +25,21 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
     """
     # merge transit and drive sedfs
     joined_sa = pd.merge(
-        left=transit_sedf[["Name", "SHAPE"]],
-        right=drive_sedf[["Name", "SHAPE"]],
-        on="Name",
+        left=transit_areas.to_crs(3857),
+        right=drive_areas.to_crs(3857),
+        on="cutoffs",  # TODO: join on location, TOD, cutoff
         how="inner",
         suffixes=("_transit", "_drive"),
-    ).astype({"SHAPE_transit": "geometry", "SHAPE_drive": "geometry"})
+    )
 
     # compute preliminaries
-    joined_sa["area(D)"] = joined_sa.SHAPE_drive.geom.area
-    joined_sa["area(D - T)"] = joined_sa.SHAPE_drive.geom.difference(
-        joined_sa.SHAPE_transit
-    ).geom.area
-    joined_sa["area(T - D)"] = joined_sa.SHAPE_transit.geom.difference(
-        joined_sa.SHAPE_drive
-    ).geom.area.fillna(
-        0.0
-    )  # when the difference is a null set arcgis returns NaN
+    joined_sa["area(D)"] = joined_sa["geometry_drive"].area
+    joined_sa["area(D - T)"] = (
+        joined_sa["geometry_drive"].difference(joined_sa["geometry_transit"]).area
+    )
+    joined_sa["area(T - D)"] = (
+        joined_sa["geometry_transit"].difference(joined_sa["geometry_drive"]).area
+    )
 
     # compute TDTC and TB
     joined_sa["TDTC"] = (joined_sa["area(D)"] - joined_sa["area(D - T)"]) / joined_sa[
@@ -55,4 +53,4 @@ def compute_metroscore(transit_sedf, drive_sedf, bonus_weight=2.0, return_all=Fa
     if return_all:
         return joined_sa
     else:
-        return joined_sa[["Name", "Metroscore"]]
+        return joined_sa[["cutoff", "Metroscore"]]  # TODO: return location, TOD as well

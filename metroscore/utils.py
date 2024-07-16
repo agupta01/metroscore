@@ -1,12 +1,17 @@
 import warnings
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import cache
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
+import geopandas as gpd
 import osmnx as ox
+from dateutil import parser
 from networkx import Graph, MultiGraph
 from shapely.geometry import LineString, Point
+
+from metroscore.constants import DEFAULT_WALK_SPEED
 
 OSMEdge = Tuple[int, int, Dict]  # (u_id, v_id, data)
 OSMNode = Tuple[int, Dict]  # (node_id, data)
@@ -60,6 +65,69 @@ class NodeToEdgeMergeResult:
     projected_node: OSMNode
     projected_edge: OSMEdge
     partitioned_edges: List[OSMEdge]
+
+
+def start_time_to_seconds(start_time: str):
+    return (parser.parse(start_time) - parser.parse("12AM")).seconds
+
+
+def get_closest_node(
+    start_points: List[Tuple[float, float]],
+    graph,
+) -> List[Tuple[int, float]]:
+    """Get closest node to graph and how long it'll take to get there, in seconds."""
+    point_gdf = gpd.GeoDataFrame(
+        [(*point, Point(*point)) for point in start_points], geometry=2, crs=4326
+    ).to_crs(3857)
+    if graph.graph.get("crs") != 3857:
+        # need the graph in a projected CRS. Use 3857 for consistency with starting point CRS
+        graph = ox.project_graph(graph, to_crs=3857)
+    nodes_and_dists = list(
+        zip(
+            *ox.nearest_nodes(
+                G=graph,
+                X=point_gdf.loc[:, 2].x,
+                Y=point_gdf.loc[:, 2].y,
+                return_dist=True,
+            )
+        )
+    )
+    # convert dists into walk time
+    return list(map(lambda x: (x[0], x[1] / DEFAULT_WALK_SPEED), nodes_and_dists))
+
+
+def get_dampened_speeds_per_road_type(G: Graph, traffic_damper: float) -> Dict:
+    """
+    Returns dampened speeds per road type in graph G.
+
+    Args:
+        G: Graph
+        traffic_damper: float
+            Dampening factor for traffic speeds.
+
+    Returns:
+        Dict: Dampened speeds per road type.
+    """
+    edge_speeds = defaultdict(list)
+    for i, r in ox.graph_to_gdfs(G, nodes=False).iterrows():
+        if isinstance(r["highway"], list):
+            for j, x in enumerate(r["highway"]):
+                if isinstance(r["maxspeed"], list):
+                    if str(r["maxspeed"][j]) != "nan":
+                        edge_speeds[x].append(int(r["maxspeed"][j].strip("mph")))
+                else:
+                    if str(r["maxspeed"]) != "nan":
+                        edge_speeds[x].append(int(r["maxspeed"].strip("mph")))
+        else:
+            if str(r["maxspeed"]) != "nan":
+                if isinstance(r["maxspeed"], list):
+                    edge_speeds[r["highway"]].extend(
+                        map(lambda x: int(x.strip("mph")), r["maxspeed"])
+                    )
+                else:
+                    edge_speeds[r["highway"]].append(int(r["maxspeed"].strip("mph")))
+
+    return edge_speeds
 
 
 def __fill_missing_geometries(graph):
