@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from geopandas import GeoDataFrame
 from networkx import MultiGraph
 from shapely import unary_union
 from shapely.geometry import MultiPolygon, Polygon
@@ -180,20 +181,20 @@ def get_transit_areas(
             reachable_with_buffers,
             columns=["stop_id", "time_to_node", "buffer_at_node"],
         ).set_index("stop_id")
-        reachable_with_buffers = reachable_with_buffers.merge(
-            node_gdf[["geometry"]],
-            left_index=True,
-            right_index=True,
-            how="left",
+        reachable_with_buffers_gpd: GeoDataFrame = GeoDataFrame(
+            reachable_with_buffers.merge(  # type: ignore
+                node_gdf[["geometry"]],
+                left_index=True,
+                right_index=True,
+                how="left",
+            ),
+            geometry="geometry",
+            crs=node_gdf.crs,
+        ).to_crs(3857)
+        buffered_col = reachable_with_buffers_gpd["geometry"].buffer(  # type: ignore
+            reachable_with_buffers["buffer_at_node"]  # type: ignore
         )
-        reachable_with_buffers = gpd.GeoDataFrame(
-            reachable_with_buffers, geometry="geometry", crs=node_gdf.crs
-        )
-        reachable_with_buffers = reachable_with_buffers.to_crs(3857)
-        reachable_with_buffers["buffered"] = reachable_with_buffers["geometry"].buffer(
-            reachable_with_buffers["buffer_at_node"]
-        )
-        return unary_union(reachable_with_buffers["buffered"])
+        return unary_union(buffered_col)  # type: ignore
 
     reachable_areas = {
         cutoff: _get_reachable_polygon_for_cutoff(cutoff) for cutoff in cutoffs

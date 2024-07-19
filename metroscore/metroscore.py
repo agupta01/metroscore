@@ -115,7 +115,7 @@ class Metroscore:
         Returns:
             pandas.DataFrame: DataFrame with 4 columns: location, time_of_day, cutoff, and metroscore.
         """
-        if not overwrite and self._results:
+        if not overwrite and self._results:  # type: ignore
             raise ValueError(
                 "Results already exist. Set overwrite to True to overwrite."
             )
@@ -140,7 +140,8 @@ class Metroscore:
             cutoffs (list): List of times (in seconds) to use as travel times.
 
         Returns:
-            geopandas.GeoDataFrame: DataFrame with 4 columns: location, time_of_day, cutoff, and transit areas (MultiPolygons)
+            geopandas.GeoDataFrame: DataFrame with 4 columns: location, time_of_day,
+            cutoff, and transit areas (MultiPolygons)
         """
         if not self._transit_graph:
             raise ValueError(
@@ -155,29 +156,32 @@ class Metroscore:
         # TODO: deduplicate closest points, as they may be the same for different locations
 
         # Compute the service areas
-        # TODO: needs to happen for all locations (origin_id) and start times
-        sp = service_areas.time_dependent_djikstra(
-            G=self._transit_graph,
-            timetable=self._timetable,
-            start_time=official_start_time,
-            origin_id=closest_node,
-        )
-        travel_times_from_origin = dict(
-            map(
-                lambda x: (x[0], x[1] - official_start_time),
-                filter(lambda x: x[1] != np.inf, sp.items()),
-            )
-        )
-        transit_areas = service_areas.get_transit_areas(
-            travel_times_from_origin,
-            cutoffs,
-            ox.graph_to_gdfs(self._transit_graph, edges=False),
-        )
-        transit_areas = (
-            gpd.GeoDataFrame(transit_areas.sort_index(ascending=False))
-            .reset_index(drop=False)
-            .rename(columns={"index": "cutoffs", 0: "geometry"})
-        )
+
+        for origin_id, headstart in closest_node_list:
+            for time_of_day in time_of_days:
+                official_start_time = time_of_day + headstart
+                sp = service_areas.time_dependent_dijkstra(
+                    G=self._transit_graph,
+                    timetable=self._timetable,
+                    start_time=official_start_time,
+                    origin_id=origin_id,
+                )
+                travel_times_from_origin = dict(
+                    map(
+                        lambda x: (x[0], x[1] - official_start_time),
+                        filter(lambda x: x[1] != np.inf, sp.items()),
+                    )
+                )
+                transit_areas = service_areas.get_transit_areas(
+                    travel_times_from_origin,
+                    cutoffs,
+                    ox.graph_to_gdfs(self._transit_graph, edges=False),
+                )
+                transit_areas = (
+                    gpd.GeoDataFrame(transit_areas.sort_index(ascending=False))
+                    .reset_index(drop=False)
+                    .rename(columns={"index": "cutoffs", 0: "geometry"})
+                )
         return transit_areas.set_geometry("geometry")
 
     def __compute_driveshed(self, locations: list, time_of_days: list, cutoffs: list):
@@ -190,7 +194,8 @@ class Metroscore:
             cutoffs (list): List of times (in seconds) to use as travel times.
 
         Returns:
-            geopandas.GeoDataFrame: DataFrame with 4 columns: location, time_of_day, cutoff, and drive areas (MultiPolygons)
+            geopandas.GeoDataFrame: DataFrame with 4 columns: location, time_of_day,
+            cutoff, and drive areas (MultiPolygons)
         """
         if not self._drive_graph:
             raise ValueError(
@@ -204,22 +209,27 @@ class Metroscore:
 
         # Compute the service areas
         # TODO: needs to happen for all locations (source)
-        time_to_all_paths = nx.single_source_dijkstra_path_length(
-            G=self._drive_graph,
-            cutoff=official_start_time + max(cutoffs),
-            source=drive_closest_node,
-            weight="travel_time",
-        )
-        drive_areas = msa.get_transit_areas(
-            {k: v + drive_time_headstart for k, v in time_to_all_paths.items()},
-            cutoffs,
-            ox.graph_to_gdfs(drive_network, edges=False),
-        )
-        drive_areas = (
-            gpd.GeoDataFrame(drive_areas.sort_index(ascending=False))
-            .reset_index(drop=False)
-            .rename(columns={"index": "cutoffs", 0: "geometry"})
-        )
+        for source, headstart in closest_node_list:
+            for time_of_day in time_of_days:
+                official_start_time = time_of_day + headstart
+                time_to_all_paths = nx.single_source_dijkstra_path_length(
+                    G=self._drive_graph,
+                    cutoff=official_start_time + max(cutoffs),
+                    source=source,
+                    weight="travel_time",
+                )
+                drive_areas = service_areas.get_transit_areas(
+                    {k: v + headstart for k, v in time_to_all_paths.items()},
+                    cutoffs,
+                    # TODO: cache this call
+                    ox.graph_to_gdfs(self._drive_graph, edges=False),
+                )
+                drive_areas = (
+                    gpd.GeoDataFrame(drive_areas.sort_index(ascending=False))
+                    .reset_index(drop=False)
+                    .rename(columns={"index": "cutoffs", 0: "geometry"})
+                )
+
         return drive_areas.set_geometry("geometry")
 
     def get_score(self, location, time_of_day, cutoff):
