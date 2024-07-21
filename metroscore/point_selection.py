@@ -11,7 +11,7 @@ def cast_to_point(coord: Coordinate) -> Point:
     return Point(coord.lon, coord.lat)
 
 
-def make_random_points(polygon: Polygon, N: int = 10) -> list[Coordinate]:
+def make_random_points(polygon: Polygon, N: int = 10) -> List[Coordinate]:
     """Creates `N` random points within the polygon `polygon`.
 
     Args:
@@ -19,7 +19,7 @@ def make_random_points(polygon: Polygon, N: int = 10) -> list[Coordinate]:
         N (int, optional): Number of points to generate. Defaults to 10.
 
     Returns:
-        list[Coordinate]: List of Coordinate (longitude, latitude) points.
+        List[Coordinate]: List of Coordinate (longitude, latitude) points.
     """
     import numpy as np
 
@@ -45,7 +45,7 @@ def make_hex_points(polygon: Polygon, N: int = 10) -> List[Coordinate]:
         N (int, optional): Number of points to generate. Defaults to 10.
 
     Returns:
-        list[Coordinate]: List of Coordinate (longitude, latitude) points.
+        List[Coordinate]: List of Coordinate (longitude, latitude) points.
     """
     # TODO: implement
     return []
