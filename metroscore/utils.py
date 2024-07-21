@@ -96,14 +96,12 @@ def get_closest_node(
     return list(map(lambda x: (x[0], x[1] / DEFAULT_WALK_SPEED), nodes_and_dists))
 
 
-def get_dampened_speeds_per_road_type(G: Graph, traffic_damper: float) -> Dict:
+def get_dampened_speeds_per_road_type(G: Graph) -> Dict:
     """
     Returns dampened speeds per road type in graph G.
 
     Args:
         G: Graph
-        traffic_damper: float
-            Dampening factor for traffic speeds.
 
     Returns:
         Dict: Dampened speeds per road type.

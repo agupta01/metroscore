@@ -4,6 +4,7 @@ import geopandas as gpd
 import networkx as nx
 import numpy as np
 import osmnx as ox
+import pandas as pd
 
 import metroscore.analysis as mna
 import metroscore.constants as mconstants
@@ -50,16 +51,16 @@ class Metroscore:
         self._drive_graph = ox.project_graph(self._drive_graph)
         edge_travel_speeds = mutils.get_dampened_speeds_per_road_type(
             self._drive_graph,
-            traffic_damper,
         )
         self._drive_graph = ox.add_edge_speeds(
             self._drive_graph,
             hwy_speeds={
-                k: np.mean(v) * mconstants.MILE_TO_KM * 0.3
+                k: np.mean(v) * mconstants.MILE_TO_KM * traffic_damper
                 for k, v in edge_travel_speeds.items()
             },
         )
         self._drive_graph = ox.add_edge_travel_times(self._drive_graph)
+        self._drive_nodes, self._drive_edges = ox.graph_to_gdfs(self._drive_graph)
         return self
 
     def build_transit(self, **kwargs):
@@ -88,6 +89,7 @@ class Metroscore:
             walk=walk_graph,
             **gtfs_feeds,
         )
+        self._transit_nodes, self._transit_edges = ox.graph_to_gdfs(self._transit_graph)
         return self
 
     def save(self, path: str):
@@ -156,7 +158,11 @@ class Metroscore:
         # TODO: deduplicate closest points, as they may be the same for different locations
 
         # Compute the service areas
-
+        transit_areas = gpd.GeoDataFrame(
+            columns=["cutoffs"],
+            geometry="geometry",
+            crs="EPSG:3857",
+        )
         for origin_id, headstart in closest_node_list:
             for time_of_day in time_of_days:
                 official_start_time = time_of_day + headstart
@@ -172,16 +178,26 @@ class Metroscore:
                         filter(lambda x: x[1] != np.inf, sp.items()),
                     )
                 )
-                transit_areas = service_areas.get_transit_areas(
+                _transit_areas = service_areas.get_transit_areas(
                     travel_times_from_origin,
                     cutoffs,
-                    ox.graph_to_gdfs(self._transit_graph, edges=False),
+                    self._transit_nodes,
                 )
-                transit_areas = (
+                _transit_areas = (
                     gpd.GeoDataFrame(transit_areas.sort_index(ascending=False))
                     .reset_index(drop=False)
                     .rename(columns={"index": "cutoffs", 0: "geometry"})
                 )
+                # Add time and source info to name
+                _transit_areas["name"] = (
+                    str(origin_id)
+                    + "_"
+                    + str(time_of_day)
+                    + "_"
+                    + _transit_areas["cutoffs"].astype(str)
+                )
+                _transit_areas.drop(columns=["cutoffs"], inplace=True)
+                transit_areas = pd.concat([transit_areas, _transit_areas])
         return transit_areas.set_geometry("geometry")
 
     def __compute_driveshed(self, locations: list, time_of_days: list, cutoffs: list):
@@ -208,7 +224,11 @@ class Metroscore:
         )
 
         # Compute the service areas
-        # TODO: needs to happen for all locations (source)
+        drive_areas = gpd.GeoDataFrame(
+            columns=["cutoffs"],
+            geometry="geometry",
+            crs="EPSG:3857",
+        )
         for source, headstart in closest_node_list:
             for time_of_day in time_of_days:
                 official_start_time = time_of_day + headstart
@@ -218,18 +238,26 @@ class Metroscore:
                     source=source,
                     weight="travel_time",
                 )
-                drive_areas = service_areas.get_transit_areas(
+                _drive_areas = service_areas.get_transit_areas(
                     {k: v + headstart for k, v in time_to_all_paths.items()},
                     cutoffs,
-                    # TODO: cache this call
-                    ox.graph_to_gdfs(self._drive_graph, edges=False),
+                    self._drive_nodes,
                 )
-                drive_areas = (
+                _drive_areas = (
                     gpd.GeoDataFrame(drive_areas.sort_index(ascending=False))
                     .reset_index(drop=False)
                     .rename(columns={"index": "cutoffs", 0: "geometry"})
                 )
-
+                # Add time and source info to name
+                _drive_areas["name"] = (
+                    str(source)
+                    + "_"
+                    + str(time_of_day)
+                    + "_"
+                    + _drive_areas["cutoffs"].astype(str)
+                )
+                _drive_areas.drop(columns=["cutoffs"], inplace=True)
+                drive_areas = pd.concat([drive_areas, _drive_areas])
         return drive_areas.set_geometry("geometry")
 
     def get_score(self, location, time_of_day, cutoff):

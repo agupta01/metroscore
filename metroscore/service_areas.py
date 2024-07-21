@@ -133,7 +133,7 @@ def get_transit_areas(
     cutoffs: List[float],
     node_gdf: gpd.GeoDataFrame,
     use_walking_buffer: bool = False,
-) -> gpd.GeoDataFrame:
+) -> gpd.GeoSeries:
     """
     Get the polygons of reachable areas from a given origin.
 
