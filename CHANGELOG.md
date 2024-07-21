@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- Rewrite with OSS packages
+- Add Metroscore object
+
 ## [v0.2.0](https://github.com/agupta01/metroscore/releases/tag/v0.2.0) - 2023-03-24
 
 ## Added

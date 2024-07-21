@@ -3,9 +3,9 @@ numpy==1.24.2
 pandas==2.0.2
 osmnx==1.9.2
 networkx
-fiona==1.9.6
-geopandas==0.14.3
-shapely==2.0.3
+fiona
+geopandas
+shapely
 scikit-learn
 matplotlib
 scipy
