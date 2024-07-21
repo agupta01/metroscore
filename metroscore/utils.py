@@ -1,7 +1,7 @@
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass
-from functools import cache
+from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -260,7 +260,7 @@ def merge_edge_to_node(edge: OSMEdge, node: OSMNode) -> NodeToEdgeMergeResult:
     )
 
 
-@cache
+@lru_cache(maxsize=None)
 def prep_node_tuple(graph: Graph, node_id: int) -> OSMNode:
     return node_id, graph.nodes(data=True)[node_id]
 
