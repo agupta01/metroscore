@@ -20,4 +20,4 @@ Closes #
 - [ ] I've made any necessary documentation updates
 - [ ] (If adding new functionality) I've added unit tests to cover the changes
 - [ ] (If adding new functionality) I've tried out the Metroscore SDK on a new jupyter notebook and confirmed it works as expected.
-
+- [ ] I've updated CHANGELOG.md to include my changes. 

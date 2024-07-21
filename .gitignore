@@ -21,6 +21,7 @@ pip-wheel-metadata/
 # jupyter notebooks
 
 .ipynb_checkpoints
+cache/
 
 
 # miscellaneous
@@ -48,3 +49,7 @@ __pycache__
 
 docs/build
 site/
+data/
+
+# don't upload graphml files (they're too big)
+*.graphml

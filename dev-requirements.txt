@@ -40,3 +40,14 @@ sphinx-autodoc-typehints
 
 # For parsing and comparing version numbers.
 packaging
+
+# Notebook stuff
+notebook
+contextily
+seaborn
+
+# For visualizing data on an interactive map
+folium
+
+# OSMNX explore function dependency
+mapclassify

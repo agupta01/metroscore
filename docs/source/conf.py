@@ -119,4 +119,6 @@ class ShutupSphinxAutodocTypehintsFilter(logging.Filter):
         return True
 
 
-logging.getLogger("sphinx.sphinx_autodoc_typehints").addFilter(ShutupSphinxAutodocTypehintsFilter())
+logging.getLogger("sphinx.sphinx_autodoc_typehints").addFilter(
+    ShutupSphinxAutodocTypehintsFilter()
+)
