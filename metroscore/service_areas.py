@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import heapq
 from geopandas import GeoDataFrame
 from networkx import MultiGraph
 from shapely import unary_union
@@ -102,6 +103,72 @@ def time_dependent_dijkstra(
                 q[candidate_id] = curr_id
 
     return L
+
+def time_dependent_a_star(
+    G: MultiGraph,
+    timetable: pd.Series,
+    start_time: float,
+    origin_id: Any
+) -> Dict[int, float]:
+    """
+    Implements a modified A* algorithm that finds the time-dependent shortest path from
+    origin node to all other nodes in the graph.
+
+    Args:
+        G (Graph): NetworkX Graph object.
+        timetable (pd.Series): Departure times. Index is a tuple of (from, to) node IDs. Values are in seconds (since midnight).
+        start_time (float): Current time.
+        origin_id (Any): Origin node ID.
+
+    Returns:
+        Dict[int, float]: Dictionary of node IDs and arrival times, in seconds.
+    """
+    def _zero_heuristic(G: MultiGraph, target_id: Any) -> Dict[Any, float]:
+        heuristic = {}
+        for node in G.nodes:
+            heuristic[node] = 0
+        return heuristic
+
+    N = len(G.nodes)
+    L = {_id: np.inf for _id in G.nodes}  # travel time from origin to node
+    q = {_id: -1 for _id in G.nodes}  # q is the predecessor node
+    F: Set[int] = set()  # set of settled nodes
+
+    heuristic = _zero_heuristic(G, origin_id)
+    L[origin_id] = start_time
+    counter = 0 # Use a counter to ensure unique and consistent ordering in the priority queue
+    priority_queue = [(start_time + heuristic[origin_id], start_time, counter, origin_id)]  # (f_score, g_score, counter, node)
+    counter += 1
+
+    while priority_queue:
+        _, curr_time, _, curr_id = heapq.heappop(priority_queue)
+        if curr_id in F:
+            continue
+        F.add(curr_id)
+
+        for candidate_id in G.neighbors(curr_id):
+            if candidate_id in F:
+                continue
+            wait_time = get_next_departure_time(
+                curr_time,
+                curr_id,
+                candidate_id,
+                timetable,
+            ) - (curr_time % 86400)
+            try:
+                travel_time = G.get_edge_data(curr_id, candidate_id)["travel_time"]
+            except KeyError:
+                travel_time = G.get_edge_data(curr_id, candidate_id, key=0)["travel_time"]
+            tentative_g_score = curr_time + travel_time + wait_time
+            if L[candidate_id] > tentative_g_score:
+                L[candidate_id] = tentative_g_score
+                f_score = tentative_g_score + heuristic[candidate_id]
+                heapq.heappush(priority_queue, (f_score, tentative_g_score, counter, candidate_id))  # Add counter for tie-breaking
+                counter += 1
+                q[candidate_id] = curr_id
+
+    return L
+
 
 
 def get_next_departure_time(
