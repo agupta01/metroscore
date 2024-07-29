@@ -5,8 +5,8 @@ import pandas as pd
 from metroscore.service_areas import (
     floyd_warshall_fast,
     floyd_warshall_slow,
+    time_dependent_a_star,
     time_dependent_dijkstra,
-    time_dependent_a_star
 )
 
 
@@ -58,6 +58,7 @@ def test_tdsp_djikstra():
     assert result[3] == 13
     assert result[4] == 18
 
+
 def test_tdsp_a_star():
     G = nx.DiGraph()
     G.add_edges_from(
@@ -82,6 +83,7 @@ def test_tdsp_a_star():
     assert result[2] == 10
     assert result[3] == 13
     assert result[4] == 18
+
 
 def test_tdsp_djikstra_every_other_second():
     """Departure times at all nodes are every other second."""
