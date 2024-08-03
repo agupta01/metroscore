@@ -25,6 +25,9 @@ sphinx_rtd_theme
 sphinx == 7.*  # same value as needs_sphinx in /docs/source/conf.py
 sphinx-autodoc-typehints
 
+# Lets Sphinx parse markdown files in addition to rst.
+myst-parser>=0.15.2,<2.1.0
+
 # For parsing and comparing version numbers.
 packaging
 
