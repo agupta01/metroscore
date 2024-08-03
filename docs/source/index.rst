@@ -3,35 +3,51 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-**metroscore**
+**Metroscore**
 ===============
 
-.. automodule:: metroscore
+Metroscore is a Python package for analyzing transit quality in a region.
+It compares the accessibility of driving to the accessibility of public transit options
+(walking, biking, & public transit) for any given time, place, and trip length.
+The result is a collection of analyses for a region that can be analyzed to understand how spatial and temporal
+constraints affect transit performance.
 
 Contents
 --------
 
 .. toctree::
    :maxdepth: 1
-   :caption: Getting started:
 
    installation
-   tutorial
-   api
-   CHANGELOG
 
 .. toctree::
-   :hidden:
-   :caption: Development
+   :maxdepth: 1
 
-   License <https://raw.githubusercontent.com/allenai/metroscore/main/LICENSE>
+   tutorial
+
+.. toctree::
+   :maxdepth: 1
+
+   user-reference
+
+.. toctree::
+   :maxdepth: 1
+
+   internals-reference
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Contributing:
+
+   CHANGELOG
+   License <https://raw.githubusercontent.com/agupta01/metroscore/main/LICENSE>
    CONTRIBUTING
    GitHub Repository <https://github.com/agupta01/metroscore>
 
 Team
 ----
 
-**metroscore** is developed and maintained by Arunav Gupta.
+**metroscore** is developed and maintained by Arunav Gupta and Tony Qian.
 
 License
 -------

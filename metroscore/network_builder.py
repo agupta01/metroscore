@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 
 import geopandas as gpd
 import networkx as nx
@@ -30,7 +30,7 @@ def build_walk_graph(region: str) -> nx.MultiDiGraph:
     return walk_graph
 
 
-def load_network_and_timetable(**kwargs: Feed | nx.MultiDiGraph):
+def load_network_and_timetable(**kwargs: Union[Feed, nx.MultiDiGraph]):
     transit_graph = None
     timetable = None
     for mode, feed in kwargs.items():

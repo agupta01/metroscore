@@ -5,24 +5,22 @@ def compute_metroscore(transit_areas, drive_areas, bonus_weight=2.0, return_all=
     """
     Computes the row-wise metroscore for each computed service area.
 
-    :param transit_sedf: SEDF with shapes of transit service areas and unique names of
-    format "<Facility ID> : <FromBreak> - <ToBreak>".
-    :type transit_sedf: pandas.DataFrame
-    :param drive_sedf: SEDF with shapes of drive-time service areas and unique names
-    matching those in `transit_sedf`.
-    :type drive_sedf: pandas.DataFrame
-    :param bonus_weight: float of weightage to give to transit bonus., defaults to 2.0
-    :type bonus_weight: float, optional
-    :param return_all: whether to return all columns (including intermediate steps) or
-    just the final metroscore., defaults to False
-    :type return_all: bool, optional
-    :return: Pandas DataFrame with schema:
-    {
-        "Name": (str) unique service area names of format "<Facility ID> : <FromBreak> - <ToBreak>",
-        "Metroscore": (float) metroscore of service area
-    }
-    :rtype: pandas.DataFrame
-    """
+    Args:
+        transit_areas (pandas.DataFrame): DataFrame with shapes of transit service areas and unique names of format "<Facility ID> : <FromBreak> - <ToBreak>".
+        drive_areas (pandas.DataFrame): DataFrame with shapes of drive-time service areas and unique names matching those in ``transit_areas``.
+        bonus_weight (float, optional): Weightage to give to transit bonus. Defaults to 2.0.
+        return_all (bool, optional): Whether to return all columns (including intermediate steps) or just the final metroscore. Defaults to False.
+
+    Returns:
+        pandas.DataFrame: DataFrame with schema:
+
+        .. code-block:: json
+
+            {
+                "name": <unique service area names of format "<facility id> : <frombreak> - <tobreak>".>
+                "metroscore": <metroscore of service area.>
+            }
+    """  # noqa: E501
     # merge transit and drive sedfs
     joined_sa = pd.merge(
         left=transit_areas.to_crs(3857),

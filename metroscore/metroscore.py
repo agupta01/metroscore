@@ -14,6 +14,18 @@ import metroscore.utils as mutils
 
 
 class Metroscore:
+    """
+    Main object that creates Metroscore analyses.
+
+    Args:
+        name (str): The name of the place for analysis.
+        C (float): Scaling factor used in metroscore calculation.
+
+    Returns:
+        Metroscore: Instance of Metroscore object. Note that this object is not able to run analyses
+        until the drive and transit networks are built by running ``build_drive`` and ``build_transit``.
+    """
+
     def __init__(self, name: str, C: float):
         """
         Initialize the Metroscore object.
@@ -21,7 +33,6 @@ class Metroscore:
         Args:
             name (str): The name of the place for analysis.
             C (float): Scaling factor used in metroscore calculation.
-            traffic_damper (float): Dampening factor for traffic speeds. Defaults to 0.3.
 
         Returns:
             Metroscore: Instance of Metroscore object
