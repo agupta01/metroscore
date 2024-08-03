@@ -9,6 +9,8 @@ ignore =
     W503
     # assigning lambda expressions
     E731
+    # ignore within docstring
+    D
 
 exclude =
     .venv

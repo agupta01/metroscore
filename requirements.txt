@@ -1,4 +1,5 @@
 # Add your own dependencies to this file.
+setuptools
 numpy==1.24.2
 pandas==2.0.2
 osmnx==1.9.2

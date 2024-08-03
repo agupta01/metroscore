@@ -1,4 +1,5 @@
-# Contributing
+Contributing
+============
 
 Thanks for considering contributing! Please read this document to learn the various ways you can contribute to this project and how to go about doing it.
 
@@ -18,8 +19,7 @@ code sample or an executable test case demonstrating the expected behavior.
 
 We use GitHub issues to track feature requests. Before you create a feature request:
 
-* Make sure you have a clear idea of the enhancement you would like. If you have a vague idea, consider discussing
-it first on a GitHub issue.
+* Make sure you have a clear idea of the enhancement you would like. If you have a vague idea, consider discussing it first on a GitHub issue.
 * Check the documentation to make sure your feature does not already exist.
 * Do [a quick search](https://github.com/agupta01/metroscore/issues) to see whether your feature has already been suggested.
 

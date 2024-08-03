@@ -1,3 +1,8 @@
+.PHONY : clean
+clean:
+	rm -rf ./.venv
+	rm -rf ./metroscore.egg-info
+
 .PHONY : docs
 docs :
 	rm -rf docs/build/
@@ -9,7 +14,7 @@ run-checks :
 	black --check .
 	flake8 .
 	mypy .
-	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ metroscore/
+	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --cov --doctest-modules tests/ metroscore/
 
 .PHONY : precommit
 precommit :
@@ -17,11 +22,11 @@ precommit :
 	black .
 	flake8 .
 	mypy .
-	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ metroscore/
+	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --cov --doctest-modules tests/ metroscore/
 
 .PHONY: setup-dev
 setup-dev:
-	python3 -m venv .venv
+	python -m venv .venv
 	. .venv/bin/activate && \
 	pip install --upgrade pip && \
 	pip install -r requirements.txt && \
