@@ -5,8 +5,6 @@ build:
   tools:
     python: "3.10"
 
-formats: all
-
 python:
   install:
     - requirements: requirements.txt
