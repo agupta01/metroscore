@@ -6,6 +6,7 @@ clean:
 .PHONY : docs
 docs :
 	rm -rf docs/build/
+	sphinx-build -M linkcheck docs/source/ docs/build/
 	sphinx-autobuild -b html --watch metroscore/ docs/source/ docs/build/
 
 .PHONY : run-checks
