@@ -14,7 +14,7 @@ def compute_metroscore(transit_areas, drive_areas, bonus_weight=2.0, return_all=
     Returns:
         pandas.DataFrame: DataFrame with schema:
 
-        .. code-block:: json
+        .. code-block::
 
             {
                 "name": <unique service area names of format "<facility id> : <frombreak> - <tobreak>".>
