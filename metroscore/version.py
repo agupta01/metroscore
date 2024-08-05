@@ -8,4 +8,4 @@ _PATCH = "0"
 _SUFFIX = "rc.1"
 
 VERSION_SHORT = "{0}.{1}".format(_MAJOR, _MINOR)
-VERSION = "{0}.{1}.{2}{3}".format(_MAJOR, _MINOR, _PATCH, _SUFFIX)
+VERSION = "{0}.{1}.{2}-{3}".format(_MAJOR, _MINOR, _PATCH, _SUFFIX)
