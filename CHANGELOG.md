@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [v1.0.0-rc.1](https://github.com/agupta01/metroscore/releases/tag/v1.0.0-rc.1) - 2024-08-05
+
 ## Added
 - Rewrite with OSS packages
 - Add Metroscore object
