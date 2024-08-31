@@ -33,3 +33,12 @@ setup-dev:
 	pip install -r requirements.txt && \
 	pip install -r dev-requirements.txt && \
 	pip install -e .
+
+.PHONY: setup-dev-windows
+setup-dev-windows:
+	python -m venv .venv
+	call .venv/Scripts/activate && \
+	.venv\Scripts\python.exe -m pip install --upgrade pip && \
+	pip install -r requirements.txt && \
+	pip install -r dev-requirements.txt && \
+	pip install -e .
