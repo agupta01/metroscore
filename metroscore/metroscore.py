@@ -39,6 +39,7 @@ class Metroscore:
         """
         self.name = name
         self.C = C
+        self._results = None
 
     def build_drive(self, traffic_damper: float = 0.3):
         """
@@ -170,14 +171,14 @@ class Metroscore:
 
         # Compute the service areas
         transit_areas = gpd.GeoDataFrame(
-            columns=["cutoffs"],
+            columns=["cutoffs", "geometry"],
             geometry="geometry",
             crs="EPSG:3857",
         )
         for origin_id, headstart in closest_node_list:
             for time_of_day in time_of_days:
                 official_start_time = time_of_day + headstart
-                sp = service_areas.time_dependent_dijkstra(
+                sp = service_areas.time_dependent_a_star(
                     G=self._transit_graph,
                     timetable=self._timetable,
                     start_time=official_start_time,
